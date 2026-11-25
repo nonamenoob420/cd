@@ -1,0 +1,1936 @@
+================================================================================
+                    COMPILER DESIGN LAB - COMPLETE MANUAL
+================================================================================
+
+================================================================================
+                        ⚙️ INSTALLATION COMMANDS
+================================================================================
+
+Run these commands once before starting the lab:
+-------------------------------------------------------------------------------------
+    sudo apt update
+    sudo apt install build-essential flex bison gcc g++ -y
+-------------------------------------------------------------------------------------
+
+- build-essential : provides gcc compiler + C/C++ libraries
+- flex            : Fast Lexical Analyzer (generates lex.yy.c from .l files)
+- bison           : GNU parser generator (generates y.tab.c from .y files)
+
+
+################################################################################
+#                        SECTION 1 : C PROGRAMS                               #
+################################################################################
+
+
+================================================================================
+QUESTION 1.1 : Check if a user given string is a valid identifier or not
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+valid_identifier.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+int isValidIdentifier(char *identifier) {
+    if (!(isalpha(identifier[0]) || identifier[0] == '_')) {
+        return 0;
+    }
+    for (int i = 1; i < strlen(identifier); i++) {
+        if (!(isalnum(identifier[i]) || identifier[i] == '_')) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int main() {
+    char identifier[100];
+    printf("Enter an identifier: ");
+    scanf("%s", identifier);
+
+    if (isValidIdentifier(identifier)) {
+        printf("Valid identifier.\n");
+    } else {
+        printf("Invalid identifier.\n");
+    }
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc valid_identifier.c -o valid_identifier
+./valid_identifier
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+Enter an identifier: my_var1
+Valid identifier.
+
+Enter an identifier: 1var
+Invalid identifier.
+
+Enter an identifier: var-name
+Invalid identifier.
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 1.2 : Check if a user given C program statement is a valid Comment
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+valid_comment.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+#include <string.h>
+
+int main() {
+    char line[256];
+    printf("Enter a line of text: ");
+    fgets(line, sizeof(line), stdin);
+    line[strcspn(line, "\n")] = 0; // Remove newline
+
+    int len = strlen(line);
+
+    if (len >= 2 && line[0] == '/' && line[1] == '/') {
+        printf("This is a single-line comment.\n");
+    } else if (len >= 4 && line[0] == '/' && line[1] == '*' &&
+               line[len-1] == '/' && line[len-2] == '*') {
+        printf("This is a multi-line comment.\n");
+    } else {
+        printf("This is not a comment.\n");
+    }
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc valid_comment.c -o valid_comment
+./valid_comment
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+Enter a line of text: // This is a comment
+This is a single-line comment.
+
+Enter a line of text: /* Block comment */
+This is a multi-line comment.
+
+Enter a line of text: int x = 5;
+This is not a comment.
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 1.3 : Read a C program file and remove all comments into another file
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+remove_comments.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+
+int main() {
+    FILE *in = fopen("input.c", "r");
+    FILE *out = fopen("output.c", "w");
+    if (!in || !out) {
+        printf("Error opening files.\n");
+        return 1;
+    }
+
+    int ch, next_ch;
+    int in_single_comment = 0, in_multi_comment = 0;
+
+    while ((ch = fgetc(in)) != EOF) {
+        if (in_single_comment) {
+            if (ch == '\n') {
+                in_single_comment = 0;
+                fputc(ch, out);
+            }
+        } else if (in_multi_comment) {
+            if (ch == '*') {
+                next_ch = fgetc(in);
+                if (next_ch == '/') {
+                    in_multi_comment = 0;
+                } else {
+                    ungetc(next_ch, in);
+                }
+            }
+        } else {
+            if (ch == '/') {
+                next_ch = fgetc(in);
+                if (next_ch == '/') {
+                    in_single_comment = 1;
+                } else if (next_ch == '*') {
+                    in_multi_comment = 1;
+                } else {
+                    fputc(ch, out);
+                    ungetc(next_ch, in);
+                }
+            } else {
+                fputc(ch, out);
+            }
+        }
+    }
+
+    fclose(in);
+    fclose(out);
+    printf("Comments removed. Check output.c\n");
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc remove_comments.c -o remove_comments
+
+# First create an input.c file with the sample input below
+
+./remove_comments
+cat output.c
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE INPUT (input.c) -------------------------
+#include <stdio.h>
+int main() {
+    // This is a single-line comment
+    printf("Hello, World!\n");
+    /* This is a
+       multi-line comment */
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT (output.c) -----------------------
+#include <stdio.h>
+int main() {
+    
+    printf("Hello, World!\n");
+    
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 1.4 : Convert an infix statement into a postfix statement
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+infix_to_postfix.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX 100
+
+char stack[MAX];
+int top = -1;
+
+void push(char c) { stack[++top] = c; }
+char pop() { return stack[top--]; }
+
+int precedence(char c) {
+    if (c == '+' || c == '-') return 1;
+    if (c == '*' || c == '/') return 2;
+    return 0;
+}
+
+void infixToPostfix(char *infix, char *postfix) {
+    int i, j = 0;
+    for (i = 0; infix[i]; i++) {
+        char ch = infix[i];
+        if (isalnum(ch)) {
+            postfix[j++] = ch;
+        } else if (ch == '(') {
+            push(ch);
+        } else if (ch == ')') {
+            while (top != -1 && stack[top] != '(')
+                postfix[j++] = pop();
+            pop();
+        } else {
+            while (top != -1 && precedence(stack[top]) >= precedence(ch))
+                postfix[j++] = pop();
+            push(ch);
+        }
+    }
+    while (top != -1) postfix[j++] = pop();
+    postfix[j] = '\0';
+}
+
+int main() {
+    char infix[MAX], postfix[MAX];
+    printf("Enter an infix expression: ");
+    scanf("%s", infix);
+    infixToPostfix(infix, postfix);
+    printf("Postfix expression: %s\n", postfix);
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc infix_to_postfix.c -o infix_to_postfix
+./infix_to_postfix
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+Enter an infix expression: a+b*c
+Postfix expression: abc*+
+
+Enter an infix expression: (a+b)*c
+Postfix expression: ab+c*
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 1.5 : Evaluate an arithmetic expression (no parentheses, + - * /)
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+evaluate_expression.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX 100
+
+int stack[MAX];
+int top = -1;
+
+void push(int val) { stack[++top] = val; }
+int pop() { return stack[top--]; }
+
+int evaluatePostfix(char *postfix) {
+    for (int i = 0; postfix[i]; i++) {
+        char ch = postfix[i];
+        if (isdigit(ch)) {
+            push(ch - '0');
+        } else {
+            int val2 = pop();
+            int val1 = pop();
+            switch (ch) {
+                case '+': push(val1 + val2); break;
+                case '-': push(val1 - val2); break;
+                case '*': push(val1 * val2); break;
+                case '/': push(val1 / val2); break;
+            }
+        }
+    }
+    return pop();
+}
+
+void infixToPostfix(char *infix, char *postfix) {
+    char opStack[MAX];
+    int opTop = -1;
+    int j = 0;
+    for (int i = 0; infix[i]; i++) {
+        char ch = infix[i];
+        if (isdigit(ch)) {
+            postfix[j++] = ch;
+        } else {
+            while (opTop != -1 &&
+                   ((ch == '+' || ch == '-') ? 1 : 2) <=
+                   ((opStack[opTop] == '+' || opStack[opTop] == '-') ? 1 : 2)) {
+                postfix[j++] = opStack[opTop--];
+            }
+            opStack[++opTop] = ch;
+        }
+    }
+    while (opTop != -1) postfix[j++] = opStack[opTop--];
+    postfix[j] = '\0';
+}
+
+int main() {
+    char infix[MAX], postfix[MAX];
+    printf("Enter an expression (no parentheses, single-digit numbers): ");
+    scanf("%s", infix);
+    infixToPostfix(infix, postfix);
+    printf("Postfix: %s\n", postfix);
+    printf("Result: %d\n", evaluatePostfix(postfix));
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc evaluate_expression.c -o evaluate_expression
+./evaluate_expression
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+Enter an expression (no parentheses, single-digit numbers): 2+3*4
+Postfix: 234*+
+Result: 14
+--------------------------------------------------------------------------------
+
+================================================================================
+
+
+################################################################################
+#                          SECTION 2 : LEX PROGRAMS                           #
+################################################################################
+
+
+================================================================================
+QUESTION 2.1 : Count characters, words, keywords, numbers, spaces, lines
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+count_all.l
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+#include <string.h>
+int chars = 0, words = 0, lines = 0, spaces = 0, keywords = 0, numbers = 0;
+%}
+
+%x COMMENT
+
+%%
+"//".*                  { /* Single-line comment, ignore */ }
+"/*"                    { BEGIN(COMMENT); }
+<COMMENT>"*/"           { BEGIN(INITIAL); }
+<COMMENT>.|\n           { /* Ignore inside comment */ }
+
+\n                      { lines++; chars++; }
+[ \t]+                  { spaces++; chars += yyleng; }
+[0-9]+                  { numbers++; words++; chars += yyleng; }
+[a-zA-Z_][a-zA-Z0-9_]*  {
+                            words++;
+                            chars += yyleng;
+                            if (strcmp(yytext, "int") == 0 || strcmp(yytext, "char") == 0 ||
+                                strcmp(yytext, "if") == 0 || strcmp(yytext, "else") == 0 ||
+                                strcmp(yytext, "for") == 0 || strcmp(yytext, "while") == 0 ||
+                                strcmp(yytext, "return") == 0 || strcmp(yytext, "void") == 0) {
+                                keywords++;
+                            }
+                        }
+.                       { chars++; }
+%%
+
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: %s <input_file>\n", argv[0]);
+        return 1;
+    }
+    yyin = fopen(argv[1], "r");
+    if (!yyin) {
+        printf("Could not open file %s\n", argv[1]);
+        return 1;
+    }
+    yylex();
+    printf("Characters: %d\n", chars);
+    printf("Words: %d\n", words);
+    printf("Lines: %d\n", lines);
+    printf("Spaces: %d\n", spaces);
+    printf("Keywords: %d\n", keywords);
+    printf("Numbers: %d\n", numbers);
+    fclose(yyin);
+    return 0;
+}
+
+int yywrap() { return 1; }
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+flex count_all.l
+gcc lex.yy.c -lfl -o count_all
+./count_all input.c
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE INPUT (input.c) -------------------------
+int main() {
+    // A comment
+    int x = 10;
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT ----------------------------------
+Characters: 62
+Words: 8
+Lines: 5
+Spaces: 12
+Keywords: 3
+Numbers: 1
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 2.2 : Count the number of vowels and consonants in a given string
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+count_vowels_consonants.l
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+int vowels = 0, consonants = 0;
+%}
+
+%%
+[aeiouAEIOU]    { vowels++; }
+[a-zA-Z]        { consonants++; }
+.|\n            { /* Ignore */ }
+%%
+
+int main() {
+    printf("Enter a string: ");
+    yylex();
+    printf("Vowels: %d\n", vowels);
+    printf("Consonants: %d\n", consonants);
+    return 0;
+}
+
+int yywrap() { return 1; }
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+flex count_vowels_consonants.l
+gcc lex.yy.c -lfl -o count_vowels_consonants
+./count_vowels_consonants
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+Enter a string: Hello World
+Vowels: 3
+Consonants: 7
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 2.3 : Count +ve/-ve integers and +ve/-ve fractions
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+count_numbers.l
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+int pos_int = 0, neg_int = 0, pos_frac = 0, neg_frac = 0;
+%}
+
+DIGIT [0-9]
+
+%%
+\+?{DIGIT}+            { pos_int++; }
+-{DIGIT}+              { neg_int++; }
+\+?{DIGIT}*\.{DIGIT}+  { pos_frac++; }
+-{DIGIT}*\.{DIGIT}+    { neg_frac++; }
+.|\n                   { /* Ignore */ }
+%%
+
+int main() {
+    yylex();
+    printf("Positive integers: %d\n", pos_int);
+    printf("Negative integers: %d\n", neg_int);
+    printf("Positive fractions: %d\n", pos_frac);
+    printf("Negative fractions: %d\n", neg_frac);
+    return 0;
+}
+
+int yywrap() { return 1; }
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+flex count_numbers.l
+gcc lex.yy.c -lfl -o count_numbers
+./count_numbers
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+2 -8 -2.5 8.5 10
+Positive integers: 2
+Negative integers: 1
+Positive fractions: 1
+Negative fractions: 1
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 2.4 : Count comment lines, eliminate them, copy into separate file
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+eliminate_comments.l
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+int comment_lines = 0;
+%}
+
+%x COMMENT
+
+%%
+"//".*                  { comment_lines++; }
+"/*"                    { BEGIN(COMMENT); comment_lines++; }
+<COMMENT>"*/"           { BEGIN(INITIAL); }
+<COMMENT>.|\n           { /* Ignore */ }
+\n                      { ECHO; }
+.                       { ECHO; }
+%%
+
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: %s <input_file>\n", argv[0]);
+        return 1;
+    }
+    yyin = fopen(argv[1], "r");
+    if (!yyin) {
+        printf("Could not open file %s\n", argv[1]);
+        return 1;
+    }
+    yyout = fopen("clean_output.c", "w");
+    yylex();
+    fclose(yyin);
+    fclose(yyout);
+    printf("Comment lines counted: %d\n", comment_lines);
+    printf("Cleaned file written to clean_output.c\n");
+    return 0;
+}
+
+int yywrap() { return 1; }
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+flex eliminate_comments.l
+gcc lex.yy.c -lfl -o eliminate_comments
+./eliminate_comments input.c
+cat clean_output.c
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE INPUT (input.c) -------------------------
+#include <stdio.h>
+int main() {
+    // This is a comment
+    printf("Hello\n");
+    /* Multi-line
+       comment */
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT ----------------------------------
+Comment lines counted: 2
+Cleaned file written to clean_output.c
+
+--- clean_output.c ---
+#include <stdio.h>
+int main() {
+    
+    printf("Hello\n");
+    
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 2.5 : Count scanf/printf, replace with readf/writef
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+replace_io.l
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+int scanf_count = 0, printf_count = 0;
+%}
+
+%%
+"scanf"     { scanf_count++; fprintf(yyout, "readf"); }
+"printf"    { printf_count++; fprintf(yyout, "writef"); }
+.|\n        { ECHO; }
+%%
+
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: %s <input_file>\n", argv[0]);
+        return 1;
+    }
+    yyin = fopen(argv[1], "r");
+    if (!yyin) {
+        printf("Could not open file %s\n", argv[1]);
+        return 1;
+    }
+    yyout = fopen("modified_output.c", "w");
+    yylex();
+    fclose(yyin);
+    fclose(yyout);
+    printf("Number of scanfs = %d\n", scanf_count);
+    printf("Number of printfs = %d\n", printf_count);
+    return 0;
+}
+
+int yywrap() { return 1; }
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+flex replace_io.l
+gcc lex.yy.c -lfl -o replace_io
+./replace_io input.c
+cat modified_output.c
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE INPUT (input.c) -------------------------
+#include <stdio.h>
+int main() {
+    int a;
+    printf("Enter a number: ");
+    scanf("%d", &a);
+    printf("You entered %d\n", a);
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT ----------------------------------
+Number of scanfs = 1
+Number of printfs = 2
+
+--- modified_output.c ---
+#include <stdio.h>
+int main() {
+    int a;
+    writef("Enter a number: ");
+    readf("%d", &a);
+    writef("You entered %d\n", a);
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 2.6 : Recognize arithmetic expression, identify identifiers/operators
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+recognize_expr.l
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+#include <stdlib.h>
+int operands = 0, operators = 0;
+%}
+
+operand [a-zA-Z0-9]+
+operator [+\-\/*]
+
+%%
+{operator}  { operators++; printf("%s is an operator\n", yytext); }
+{operand}   { operands++;  printf("%s is an operand\n", yytext); }
+\n          {
+                if (operands == operators + 1)
+                    printf("Valid expression\n");
+                else
+                    printf("Invalid expression\n");
+                exit(0);
+            }
+%%
+
+int main() { yylex(); return 0; }
+
+int yywrap() { return 1; }
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+flex recognize_expr.l
+gcc lex.yy.c -lfl -o recognize_expr
+./recognize_expr
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+a+b
+a is an operand
++ is an operator
+b is an operand
+Valid expression
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 2.7 : Recognize whether a sentence is simple or compound
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+sentence_type.l
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+int and_count = 0;
+%}
+
+%%
+"and"   { and_count++; }
+.|\n    { /* Ignore */ }
+%%
+
+int main() {
+    printf("Enter a sentence: ");
+    yylex();
+    if (and_count > 0)
+        printf("Compound sentence\n");
+    else
+        printf("Simple sentence\n");
+    return 0;
+}
+
+int yywrap() { return 1; }
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+flex sentence_type.l
+gcc lex.yy.c -lfl -o sentence_type
+./sentence_type
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+Enter a sentence: The sun rises and the sky is clear
+Compound sentence
+
+Enter a sentence: The sun rises in the east
+Simple sentence
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 2.8 : Implement arithmetic calculator (Lex only)
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+calculator.l
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+#include <stdlib.h>
+int stack[100];
+int top = -1;
+
+void push(int val) { stack[++top] = val; }
+int pop() { return stack[top--]; }
+%}
+
+%%
+[0-9]+      { push(atoi(yytext)); }
+"+"         { int b = pop(), a = pop(); push(a + b); }
+"-"         { int b = pop(), a = pop(); push(a - b); }
+"*"         { int b = pop(), a = pop(); push(a * b); }
+"/"         { int b = pop(), a = pop(); push(a / b); }
+\n          { printf("Result: %d\n", pop()); }
+.|\t        { /* Ignore whitespace */ }
+%%
+
+int main() {
+    printf("Enter a postfix expression (e.g., 3 4 +):\n");
+    yylex();
+    return 0;
+}
+
+int yywrap() { return 1; }
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+flex calculator.l
+gcc lex.yy.c -lfl -o calculator
+./calculator
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+Enter a postfix expression (e.g., 3 4 +):
+5 3 2 * +
+Result: 11
+--------------------------------------------------------------------------------
+
+================================================================================
+
+
+################################################################################
+#                          SECTION 3 : YACC PROGRAMS                           #
+################################################################################
+
+
+================================================================================
+QUESTION 3.1 : Recognize valid variable (letter followed by letters/digits)
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+valid_variable.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+#include <stdlib.h>
+void yyerror(const char *s);
+int yylex();
+%}
+
+%token LETTER DIGIT
+
+%%
+variable: LETTER rest { printf("Valid variable\n"); }
+        ;
+rest: rest LETTER
+    | rest DIGIT
+    | /* empty */
+    ;
+%%
+
+void yyerror(const char *s) { printf("Invalid variable: %s\n", s); }
+
+int main() {
+    printf("Enter a variable name: ");
+    yyparse();
+    return 0;
+}
+
+int yylex() {
+    int c = getchar();
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) return LETTER;
+    if (c >= '0' && c <= '9') return DIGIT;
+    if (c == '\n') return 0;
+    return c;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d valid_variable.y
+gcc y.tab.c -o valid_variable
+./valid_variable
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+Enter a variable name: myVar1
+Valid variable
+
+Enter a variable name: 1var
+Invalid variable: syntax error
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 3.2 : Test validity of simple expression (+ - * /)
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+valid_expr.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+void yyerror(const char *s);
+int yylex();
+%}
+
+%token NUMBER ID
+%left '+' '-'
+%left '*' '/'
+
+%%
+input: expr '\n' { printf("Valid Expression\n"); }
+     ;
+expr: expr '+' expr
+    | expr '-' expr
+    | expr '*' expr
+    | expr '/' expr
+    | '(' expr ')'
+    | NUMBER
+    | ID
+    ;
+%%
+
+void yyerror(const char *s) { printf("Invalid Expression\n"); }
+
+int main() { yyparse(); return 0; }
+
+int yylex() {
+    int c = getchar();
+    if (c >= '0' && c <= '9') {
+        while ((c = getchar()) >= '0' && c <= '9');
+        ungetc(c, stdin);
+        return NUMBER;
+    }
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) return ID;
+    if (c == '\n') return '\n';
+    return c;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d valid_expr.y
+gcc y.tab.c -o valid_expr
+./valid_expr
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+a + b * c
+Valid Expression
+
+a + * b
+Invalid Expression
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 3.3 : Recognize nested if statements and display nesting levels
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+nested_if.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+#include <string.h>
+void yyerror(const char *s);
+int yylex();
+int nesting_level = 0;
+%}
+
+%token IF
+
+%%
+stmt: IF stmt { nesting_level++; printf("Nesting level: %d\n", nesting_level); }
+    | /* empty */
+    ;
+%%
+
+void yyerror(const char *s) { printf("Error: %s\n", s); }
+
+int main() { yyparse(); return 0; }
+
+int yylex() {
+    char s[10];
+    if (scanf("%s", s) == 1) {
+        if (strcmp(s, "if") == 0) return IF;
+    }
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d nested_if.y
+gcc y.tab.c -o nested_if
+./nested_if
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+if if if
+Nesting level: 1
+Nesting level: 2
+Nesting level: 3
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 3.4 : Check syntax of simple expression (+ - * /)
+================================================================================
+(Identical grammar to Q3.2 — reused here under new filename.)
+
+------------------------------- FILE NAME --------------------------------------
+syntax_check.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+void yyerror(const char *s);
+int yylex();
+%}
+
+%token NUMBER ID
+%left '+' '-'
+%left '*' '/'
+
+%%
+input: expr '\n' { printf("Syntax OK : Valid Expression\n"); }
+     ;
+expr: expr '+' expr
+    | expr '-' expr
+    | expr '*' expr
+    | expr '/' expr
+    | '(' expr ')'
+    | NUMBER
+    | ID
+    ;
+%%
+
+void yyerror(const char *s) { printf("Syntax Error : Invalid Expression\n"); }
+
+int main() { yyparse(); return 0; }
+
+int yylex() {
+    int c = getchar();
+    if (c >= '0' && c <= '9') {
+        while ((c = getchar()) >= '0' && c <= '9');
+        ungetc(c, stdin);
+        return NUMBER;
+    }
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) return ID;
+    if (c == '\n') return '\n';
+    return c;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d syntax_check.y
+gcc y.tab.c -o syntax_check
+./syntax_check
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+a + b * c
+Syntax OK : Valid Expression
+
+a + * b
+Syntax Error : Invalid Expression
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 3.5 : Evaluate an arithmetic expression (+ - * /)
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+calc.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+#include <stdlib.h>
+void yyerror(const char *s);
+int yylex();
+%}
+
+%token NUMBER
+%left '+' '-'
+%left '*' '/'
+
+%%
+input: expr '\n' { printf("Result: %d\n", $1); }
+     ;
+expr: expr '+' expr { $$ = $1 + $3; }
+    | expr '-' expr { $$ = $1 - $3; }
+    | expr '*' expr { $$ = $1 * $3; }
+    | expr '/' expr { $$ = $1 / $3; }
+    | '(' expr ')'  { $$ = $2; }
+    | NUMBER        { $$ = $1; }
+    ;
+%%
+
+void yyerror(const char *s) { printf("Error: %s\n", s); }
+
+int main() { yyparse(); return 0; }
+
+int yylex() {
+    int c = getchar();
+    if (c >= '0' && c <= '9') {
+        int val = 0;
+        while (c >= '0' && c <= '9') {
+            val = val * 10 + (c - '0');
+            c = getchar();
+        }
+        ungetc(c, stdin);
+        yylval = val;
+        return NUMBER;
+    }
+    if (c == '\n') return '\n';
+    return c;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d calc.y
+gcc y.tab.c -o calc
+./calc
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+2 + 3 * 4
+Result: 14
+
+10 / 2 + 3
+Result: 8
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 3.6 : Recognize valid variable (letter followed by letters/digits)
+================================================================================
+(Identical to Q3.1 — reused under new filename.)
+
+------------------------------- FILE NAME --------------------------------------
+valid_var_yacc.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+#include <stdlib.h>
+void yyerror(const char *s);
+int yylex();
+%}
+
+%token LETTER DIGIT
+
+%%
+variable: LETTER rest { printf("Valid variable\n"); }
+        ;
+rest: rest LETTER
+    | rest DIGIT
+    | /* empty */
+    ;
+%%
+
+void yyerror(const char *s) { printf("Invalid variable: %s\n", s); }
+
+int main() {
+    printf("Enter a variable name: ");
+    yyparse();
+    return 0;
+}
+
+int yylex() {
+    int c = getchar();
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) return LETTER;
+    if (c >= '0' && c <= '9') return DIGIT;
+    if (c == '\n') return 0;
+    return c;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d valid_var_yacc.y
+gcc y.tab.c -o valid_var_yacc
+./valid_var_yacc
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+Enter a variable name: abc123
+Valid variable
+
+Enter a variable name: 9abc
+Invalid variable: syntax error
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 3.7 : Recognize aaab, abbb, ab, a using grammar (a^n b^n, n>=0)
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+anbn.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+void yyerror(const char *s);
+int yylex();
+%}
+
+%token A B
+
+%%
+input: /* empty */ { printf("Valid: n=0\n"); }
+     | A input B { printf("Valid: n>=1\n"); }
+     ;
+%%
+
+void yyerror(const char *s) { printf("Invalid string\n"); }
+
+int main() { yyparse(); return 0; }
+
+int yylex() {
+    int c = getchar();
+    if (c == 'a') return A;
+    if (c == 'b') return B;
+    if (c == '\n') return 0;
+    return c;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d anbn.y
+gcc y.tab.c -o anbn
+./anbn
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+aaabbb
+Valid: n>=1
+
+ab
+Valid: n>=1
+
+aab
+Invalid string
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 3.8 : Recognize grammar (a^n b, n>=10)
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+anb_n10.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+void yyerror(const char *s);
+int yylex();
+int a_count = 0;
+%}
+
+%token A B
+
+%%
+input: a_seq B {
+                  if (a_count >= 10)
+                      printf("Valid: n=%d (n>=10)\n", a_count);
+                  else
+                      printf("Invalid: n=%d (n<10)\n", a_count);
+              }
+     ;
+a_seq: A { a_count++; } a_seq
+     | /* empty */
+     ;
+%%
+
+void yyerror(const char *s) { printf("Invalid string\n"); }
+
+int main() { yyparse(); return 0; }
+
+int yylex() {
+    int c = getchar();
+    if (c == 'a') return A;
+    if (c == 'b') return B;
+    if (c == '\n') return 0;
+    return c;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d anb_n10.y
+gcc y.tab.c -o anb_n10
+./anb_n10
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+aaaaaaaaaab
+Valid: n=10 (n>=10)
+
+aaab
+Invalid: n=3 (n<10)
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 3.9 : Implement arithmetic calculator using YACC
+================================================================================
+(Identical to Q3.5 — reused under new filename.)
+
+------------------------------- FILE NAME --------------------------------------
+yacc_calculator.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+#include <stdlib.h>
+void yyerror(const char *s);
+int yylex();
+%}
+
+%token NUMBER
+%left '+' '-'
+%left '*' '/'
+
+%%
+input: expr '\n' { printf("Result: %d\n", $1); }
+     ;
+expr: expr '+' expr { $$ = $1 + $3; }
+    | expr '-' expr { $$ = $1 - $3; }
+    | expr '*' expr { $$ = $1 * $3; }
+    | expr '/' expr { $$ = $1 / $3; }
+    | '(' expr ')'  { $$ = $2; }
+    | NUMBER        { $$ = $1; }
+    ;
+%%
+
+void yyerror(const char *s) { printf("Error: %s\n", s); }
+
+int main() { yyparse(); return 0; }
+
+int yylex() {
+    int c = getchar();
+    if (c >= '0' && c <= '9') {
+        int val = 0;
+        while (c >= '0' && c <= '9') {
+            val = val * 10 + (c - '0');
+            c = getchar();
+        }
+        ungetc(c, stdin);
+        yylval = val;
+        return NUMBER;
+    }
+    if (c == '\n') return '\n';
+    return c;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d yacc_calculator.y
+gcc y.tab.c -o yacc_calculator
+./yacc_calculator
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+10 / 2 + 3
+Result: 8
+
+2 * 3 + 4 * 5
+Result: 26
+--------------------------------------------------------------------------------
+
+================================================================================
+
+
+################################################################################
+#                       SECTION 4 : ADVANCED TOPICS                            #
+################################################################################
+
+
+================================================================================
+QUESTION 4.1 : Write a Program to implement Symbol Table
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+symbol_table.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#define MAX_SYMBOLS 100
+#define MAX_NAME_LEN 50
+
+typedef struct {
+    char name[MAX_NAME_LEN];
+    char type[20];
+    int scope;
+} Symbol;
+
+Symbol table[MAX_SYMBOLS];
+int symbol_count = 0;
+
+void insert(char *name, char *type, int scope) {
+    if (symbol_count < MAX_SYMBOLS) {
+        strcpy(table[symbol_count].name, name);
+        strcpy(table[symbol_count].type, type);
+        table[symbol_count].scope = scope;
+        symbol_count++;
+        printf("Inserted: %s (Type: %s, Scope: %d)\n", name, type, scope);
+    } else {
+        printf("Symbol table is full.\n");
+    }
+}
+
+int lookup(char *name) {
+    for (int i = 0; i < symbol_count; i++)
+        if (strcmp(table[i].name, name) == 0) return i;
+    return -1;
+}
+
+void display() {
+    printf("\nSymbol Table:\n");
+    printf("Name\tType\tScope\n");
+    for (int i = 0; i < symbol_count; i++)
+        printf("%s\t%s\t%d\n", table[i].name, table[i].type, table[i].scope);
+}
+
+int main() {
+    insert("x", "int", 0);
+    insert("y", "float", 1);
+    insert("main", "function", 0);
+
+    display();
+
+    char *search = "y";
+    int idx = lookup(search);
+    if (idx != -1)
+        printf("\nFound '%s' at index %d (Type: %s)\n", search, idx, table[idx].type);
+    else
+        printf("\n'%s' not found.\n", search);
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc symbol_table.c -o symbol_table
+./symbol_table
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT ----------------------------------
+Inserted: x (Type: int, Scope: 0)
+Inserted: y (Type: float, Scope: 1)
+Inserted: main (Type: function, Scope: 0)
+
+Symbol Table:
+Name    Type     Scope
+x       int      0
+y       float    1
+main    function 0
+
+Found 'y' at index 1 (Type: float)
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 4.2 : Convert BNF rules to YACC form and generate AST
+================================================================================
+(Conceptual skeleton — extend makeNode/printAST for full working program.)
+
+------------------------------- FILE NAME --------------------------------------
+ast_example.y
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct Node {
+    char *type;
+    struct Node *left, *right;
+} Node;
+
+Node* makeNode(char *type, Node *left, Node *right) {
+    Node *n = (Node*)malloc(sizeof(Node));
+    n->type = strdup(type);
+    n->left = left;
+    n->right = right;
+    return n;
+}
+
+void printAST(Node *root, int depth) {
+    if (!root) return;
+    for (int i = 0; i < depth; i++) printf("  ");
+    printf("%s\n", root->type);
+    printAST(root->left, depth + 1);
+    printAST(root->right, depth + 1);
+}
+%}
+
+%union {
+    Node *node;
+}
+
+%token <node> NUMBER
+%type <node> expr
+%left '+' '-'
+%left '*' '/'
+
+%%
+input: expr '\n' { printf("AST:\n"); printAST($1, 0); }
+     ;
+expr: expr '+' expr { $$ = makeNode("+", $1, $3); }
+    | expr '-' expr { $$ = makeNode("-", $1, $3); }
+    | expr '*' expr { $$ = makeNode("*", $1, $3); }
+    | expr '/' expr { $$ = makeNode("/", $1, $3); }
+    | NUMBER        { $$ = $1; }
+    ;
+%%
+
+void yyerror(const char *s) { printf("Error: %s\n", s); }
+
+int main() { yyparse(); return 0; }
+
+int yylex() {
+    int c = getchar();
+    if (c >= '0' && c <= '9') {
+        int val = 0;
+        while (c >= '0' && c <= '9') { val = val * 10 + (c - '0'); c = getchar(); }
+        ungetc(c, stdin);
+        char buf[20]; sprintf(buf, "%d", val);
+        yylval.node = makeNode(buf, NULL, NULL);
+        return NUMBER;
+    }
+    if (c == '\n') return '\n';
+    return c;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+yacc -d ast_example.y
+gcc y.tab.c -o ast_example
+./ast_example
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE I/O -------------------------------------
+1 + 2 * 3
+AST:
++
+  1
+  *
+    2
+    3
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 4.3 : Write a C program to implement type checking
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+type_checking.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+#include <string.h>
+
+typedef enum { INT, FLOAT, CHAR, ERROR } Type;
+
+Type checkBinaryOp(Type left, char op, Type right) {
+    if (left == ERROR || right == ERROR) return ERROR;
+
+    if (op == '+' || op == '-' || op == '*' || op == '/') {
+        if (left == INT && right == INT) return INT;
+        if ((left == INT || left == FLOAT) &&
+            (right == INT || right == FLOAT)) return FLOAT;
+    }
+    return ERROR;
+}
+
+int main() {
+    Type t1 = INT, t2 = FLOAT, t3 = CHAR;
+
+    Type r1 = checkBinaryOp(t1, '+', t2);
+    printf("int + float = %s\n",
+           r1 == FLOAT ? "float" : (r1 == INT ? "int" : "ERROR"));
+
+    Type r2 = checkBinaryOp(t1, '*', t2);
+    printf("int * float = %s\n",
+           r2 == FLOAT ? "float" : (r2 == INT ? "int" : "ERROR"));
+
+    Type r3 = checkBinaryOp(t1, '+', t3);
+    printf("int + char  = %s\n",
+           r3 == ERROR ? "ERROR (type mismatch)" :
+           (r3 == INT ? "int" : "float"));
+
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc type_checking.c -o type_checking
+./type_checking
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT ----------------------------------
+int + float = float
+int * float = float
+int + char  = ERROR (type mismatch)
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 4.4 : Implement control flow analysis and data flow analysis
+================================================================================
+(Conceptual skeleton — extend buildCFG / performDFA for a full implementation.)
+
+------------------------------- FILE NAME --------------------------------------
+cfa_dfa.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+
+/*
+ * A minimal demonstration of Control Flow Graph (CFG) construction
+ * and a simple reaching-definitions style data flow analysis.
+ *
+ * Nodes = basic blocks.  Edges = possible control transfers.
+ */
+
+typedef struct BasicBlock {
+    int id;
+    int successors[2];   // up to 2 successors (branch/fall-through)
+    int num_successors;
+    int in_def, out_def; // simplified: whether a def reaches IN/OUT
+} BasicBlock;
+
+BasicBlock cfg[10];
+int block_count = 0;
+
+int addBlock() {
+    cfg[block_count].id = block_count;
+    cfg[block_count].num_successors = 0;
+    cfg[block_count].in_def = 0;
+    cfg[block_count].out_def = 0;
+    return block_count++;
+}
+
+void addEdge(int from, int to) {
+    cfg[from].successors[cfg[from].num_successors++] = to;
+}
+
+void printCFG() {
+    printf("Control Flow Graph (edges):\n");
+    for (int i = 0; i < block_count; i++)
+        for (int j = 0; j < cfg[i].num_successors; j++)
+            printf("  B%d -> B%d\n", i, cfg[i].successors[j]);
+}
+
+/* Simple iterative data-flow analysis (reaching definitions propagation) */
+void performDFA() {
+    /* Example: assume B0 defines something; propagate it forward */
+    cfg[0].out_def = 1;
+    int changed = 1;
+    while (changed) {
+        changed = 0;
+        for (int i = 0; i < block_count; i++) {
+            int in = 0;
+            for (int k = 0; k < block_count; k++)
+                for (int s = 0; s < cfg[k].num_successors; s++)
+                    if (cfg[k].successors[s] == i && cfg[k].out_def) in = 1;
+            if (in != cfg[i].in_def) { cfg[i].in_def = in; changed = 1; }
+            int out = cfg[i].in_def ? 1 : cfg[i].out_def;
+            if (out != cfg[i].out_def) { cfg[i].out_def = out; changed = 1; }
+        }
+    }
+}
+
+void printDFA() {
+    printf("\nData Flow Analysis (reaching-def reachability):\n");
+    for (int i = 0; i < block_count; i++)
+        printf("  B%d : IN=%d  OUT=%d\n", i, cfg[i].in_def, cfg[i].out_def);
+}
+
+int main() {
+    /* Construct a small CFG:
+     *   B0 -> B1, B2
+     *   B1 -> B3
+     *   B2 -> B3
+     *   B3 (end)
+     */
+    int b0 = addBlock();
+    int b1 = addBlock();
+    int b2 = addBlock();
+    int b3 = addBlock();
+
+    addEdge(b0, b1); addEdge(b0, b2);
+    addEdge(b1, b3); addEdge(b2, b3);
+
+    printCFG();
+    performDFA();
+    printDFA();
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc cfa_dfa.c -o cfa_dfa
+./cfa_dfa
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT ----------------------------------
+Control Flow Graph (edges):
+  B0 -> B1
+  B0 -> B2
+  B1 -> B3
+  B2 -> B3
+
+Data Flow Analysis (reaching-def reachability):
+  B0 : IN=0  OUT=1
+  B1 : IN=1  OUT=1
+  B2 : IN=1  OUT=1
+  B3 : IN=1  OUT=1
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 4.5 : Write a C program to implement Stack storage allocation strategies
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+stack_allocation.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+
+void function_with_locals() {
+    int local1 = 10;      // Allocated on the call stack
+    char buffer[64];      // Also allocated on the call stack
+
+    printf("Address of local1 (stack): %p\n", (void*)&local1);
+    printf("Address of buffer (stack): %p\n", (void*)buffer);
+
+    /* Modifying one local does not affect the other -> separate frames */
+    buffer[0] = 'A';
+    printf("local1 still = %d, buffer[0] = %c\n", local1, buffer[0]);
+}
+
+int main() {
+    printf("Calling function...\n");
+    function_with_locals();
+    printf("Returned from function.\n");
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc stack_allocation.c -o stack_allocation
+./stack_allocation
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT ----------------------------------
+Calling function...
+Address of local1 (stack): 0x7ffd5f8b3a4c
+Address of buffer (stack): 0x7ffd5f8b3a10
+local1 still = 10, buffer[0] = A
+Returned from function.
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 4.6 : Write a C program to implement DAG
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+dag_representation.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+#include <stdlib.h>
+
+#define MAX_NODES 100
+
+typedef struct Node {
+    int id;
+    int adj[MAX_NODES][MAX_NODES];
+    int num_nodes;
+} Graph;
+
+Graph* createGraph(int n) {
+    Graph *g = (Graph*)malloc(sizeof(Graph));
+    g->num_nodes = n;
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++)
+            g->adj[i][j] = 0;
+    return g;
+}
+
+void addEdge(Graph *g, int src, int dest) {
+    g->adj[src][dest] = 1;
+}
+
+void printGraph(Graph *g) {
+    printf("Adjacency Matrix:\n");
+    for (int i = 0; i < g->num_nodes; i++) {
+        for (int j = 0; j < g->num_nodes; j++)
+            printf("%d ", g->adj[i][j]);
+        printf("\n");
+    }
+}
+
+int main() {
+    Graph *g = createGraph(4);
+    addEdge(g, 0, 1);
+    addEdge(g, 0, 2);
+    addEdge(g, 1, 3);
+    addEdge(g, 2, 3);
+    printGraph(g);
+    free(g);
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc dag_representation.c -o dag_representation
+./dag_representation
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT ----------------------------------
+Adjacency Matrix:
+0 1 1 0 
+0 0 0 1 
+0 0 0 1 
+0 0 0 0 
+--------------------------------------------------------------------------------
+
+================================================================================
+QUESTION 4.7 : Backend — Three-Address Code to 8086 Assembly
+================================================================================
+
+------------------------------- FILE NAME --------------------------------------
+tac_to_asm.c
+--------------------------------------------------------------------------------
+
+------------------------------- CODE -------------------------------------------
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+void generateAsm(char *res, char *op1, char *op, char *op2) {
+    printf("MOV AX, %s\n", op1);
+    if (op[0] == '+')      printf("ADD AX, %s\n", op2);
+    else if (op[0] == '-') printf("SUB AX, %s\n", op2);
+    else if (op[0] == '*') printf("MUL %s\n", op2);              /* simplified */
+    else if (op[0] == '/') printf("MOV DX, 0\nMOV BX, %s\nDIV BX\n", op2);
+    printf("MOV %s, AX\n", res);
+}
+
+int main() {
+    char line[100];
+    printf("Enter Three-Address Code (e.g., t1 = a + b). Ctrl+D to finish:\n");
+    while (fgets(line, sizeof(line), stdin)) {
+        char res[20], op1[20], op[5], op2[20];
+        if (sscanf(line, "%s = %s %s %s", res, op1, op, op2) == 4) {
+            generateAsm(res, op1, op, op2);
+        } else if (sscanf(line, "%s = %s", res, op1) == 2) {
+            printf("MOV AX, %s\nMOV %s, AX\n", op1, res);
+        }
+    }
+    return 0;
+}
+--------------------------------------------------------------------------------
+
+------------------------------- EXECUTION --------------------------------------
+gcc tac_to_asm.c -o tac_to_asm
+./tac_to_asm
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE INPUT -----------------------------------
+t1 = a + b
+t2 = t1 * c
+--------------------------------------------------------------------------------
+
+------------------------------- SAMPLE OUTPUT ----------------------------------
+MOV AX, a
+ADD AX, b
+MOV t1, AX
+MOV AX, t1
+MUL c
+MOV t2, AX
+--------------------------------------------------------------------------------
+
+================================================================================
+                              END OF MANUAL
+================================================================================
